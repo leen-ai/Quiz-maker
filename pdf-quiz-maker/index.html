@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PDF Quiz Maker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<style>
+/* Layout: one centered study column — key + upload panels on top, answer-sheet style question cards below */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --ink:#18202E; --muted:#5B6578; --line:#DCE1EA;
+  --warn-bg:#FFF3D6; --warn-ink:#5C3D00; --warn-line:#EBCB7A;
+  --accent:#2F4FD8; --accent-soft:#E6EBFC; --on-accent:#FFFFFF; --good:#1E8A52; --good-soft:#E3F4EA; --bad:#C2372F; --bad-soft:#FBE7E5;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"Source Sans 3",ui-sans-serif,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#10141C; --surface:#181E29; --ink:#E7EBF3; --muted:#98A2B5; --line:#2A3242;
+  --warn-bg:#3A2C0C; --warn-ink:#FBE3A6; --warn-line:#6B5218;
+  --accent:#7D94FF; --accent-soft:#222C4A; --on-accent:#0D1220; --good:#4CC384; --good-soft:#15301F; --bad:#F07067; --bad-soft:#3A1C1A; color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5}
+.wrap{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:32px 64px;display:grid;gap:20px}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(28px,5vw,40px);line-height:1.1;margin:0;text-wrap:balance;letter-spacing:-.01em}
+.lede{color:var(--muted);margin:6px 0 0;max-width:60ch}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;display:grid;gap:14px}
+.drop{position:relative;border:2px dashed var(--line);border-radius:12px;padding:22px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.drop input{position:absolute;opacity:0;width:1px;height:1px}
+.pdficon{width:44px;height:54px;border-radius:6px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font:500 12px var(--mono);flex:none}
+.drop .txt{min-width:0;flex:1}
+.drop strong{display:block;font-weight:700;overflow-wrap:anywhere}
+.drop span{color:var(--muted);font-size:14px}
+.opts,.keyrow{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+.field{display:grid;gap:4px;min-width:0}
+.field label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700}
+select,input[type=text],input[type=password]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;max-width:100%}
+.field.grow{flex:1 1 220px}
+.field.grow input{width:100%}
+.check{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--muted)}
+.note{font-size:13px;color:var(--muted);margin:0}
+.note a{color:var(--accent)}
+.linkbtn{background:none;border:0;padding:0;color:var(--accent);font-weight:600;text-decoration:underline;font-size:inherit}
+.banner{position:sticky;top:0;z-index:10;background:var(--warn-bg);color:var(--warn-ink);border-bottom:1px solid var(--warn-line)}
+.banner-in{max-width:760px;margin:0 auto;padding:12px 16px;display:flex;gap:12px;align-items:flex-start}
+.banner-txt{flex:1;min-width:0}
+.banner-x{background:none;border:0;color:inherit;font-size:22px;line-height:1;padding:0 4px}
+button{font:inherit;font-weight:700;border-radius:9px;padding:10px 18px;cursor:pointer;border:1px solid transparent}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);color:var(--on-accent)}
+.primary:disabled{opacity:.5;cursor:not-allowed}
+.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.status{font-size:14px;color:var(--muted);min-height:1.5em}
+.status.err{color:var(--bad)}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.tag{font:500 12px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.score{font-family:var(--display);font-weight:800;font-size:22px}
+.qs{display:grid;gap:14px}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;display:grid;gap:12px}
+.qhead{display:flex;gap:12px;align-items:baseline}
+.qnum{font:500 13px var(--mono);color:var(--accent);flex:none}
+.qtext{font-weight:600;font-size:17px;min-width:0;overflow-wrap:anywhere;flex:1}
+.choices{display:grid;gap:8px}
+.choice{display:flex;gap:12px;align-items:flex-start;text-align:left;width:100%;background:transparent;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-weight:400;color:var(--ink)}
+.choice:hover:not(:disabled){border-color:var(--accent)}
+.choice:disabled{cursor:default}
+.oval{flex:none;width:26px;height:20px;border-radius:50%;border:1.5px solid var(--muted);display:grid;place-items:center;font:500 11px var(--mono);color:var(--muted);margin-top:2px}
+.choice.right{border-color:var(--good);background:var(--good-soft)}
+.choice.right .oval{background:var(--good);border-color:var(--good);color:#fff}
+.choice.wrong{border-color:var(--bad);background:var(--bad-soft)}
+.choice.wrong .oval{background:var(--bad);border-color:var(--bad);color:#fff}
+.choice span.t{min-width:0;overflow-wrap:anywhere}
+.explain{font-size:15px;color:var(--muted);border-left:3px solid var(--line);padding-left:12px}
+.explain b{color:var(--ink)}
+.example{font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.06em;background:var(--accent-soft);color:var(--accent);padding:2px 8px;border-radius:99px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<div class="banner" id="banner" role="alert" hidden>
+  <div class="banner-in">
+    <div class="banner-txt"><strong id="bannerTitle"></strong> <span id="bannerText"></span></div>
+    <button class="banner-x" id="bannerClose" type="button" aria-label="Dismiss notice">&times;</button>
+  </div>
+</div>
+<div class="wrap">
+  <header>
+    <h1>PDF Quiz Maker</h1>
+    <p class="lede">Upload a PDF of your notes or slides. Gemini reads it and writes multiple-choice questions you can answer and check right here.</p>
+  </header>
+
+  <section class="panel" aria-label="API key" id="keyPanel">
+    <div class="keyrow">
+      <div class="field grow"><label for="apikey">Gemini API key (free)</label>
+        <input type="password" id="apikey" placeholder="AIza..." autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label for="model">Model</label>
+        <select id="model"><option value="">Connect your key first</option></select></div>
+      <button class="ghost" id="connect" type="button">Connect</button>
+    </div>
+    <label class="check"><input type="checkbox" id="remember"> Remember my key in this browser</label>
+    <p class="note">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com</a> (sign in with Google, then click <b>Create API key</b>). Your key goes only from your browser to Google. Don't save it on a shared computer, and don't upload private documents: Google may use free-tier requests to improve its products.</p>
+  </section>
+
+  <section class="panel" aria-label="Make a quiz">
+    <label class="drop" id="drop" for="file">
+      <input type="file" id="file" accept="application/pdf,.pdf">
+      <div class="pdficon">PDF</div>
+      <div class="txt"><strong id="fileName">Choose a PDF or drop it here</strong><span id="fileInfo">Text-based PDFs work best. Scanned images can't be read.</span></div>
+    </label>
+    <div class="opts">
+      <div class="field"><label for="count">Questions</label>
+        <select id="count"><option>5</option><option selected>10</option><option>15</option><option>20</option><option>30</option></select></div>
+      <div class="field"><label for="level">Difficulty</label>
+        <select id="level"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option><option value="mixed">Mixed</option></select></div>
+      <div class="field grow"><label for="focus">Focus (optional)</label>
+        <input type="text" id="focus" placeholder="e.g. key terms and authors"></div>
+      <button class="primary" id="gen" type="button" disabled>Generate quiz</button>
+      <button class="ghost" id="stop" type="button" hidden>Stop</button>
+    </div>
+    <div class="status" id="status" role="status"></div>
+    <p class="note" id="ownKeyLine" hidden>Using this site's free key. <button class="linkbtn" id="ownKey" type="button">Use my own key</button></p>
+  </section>
+
+  <section id="quizArea" aria-label="Quiz">
+    <div class="bar">
+      <span class="tag" id="quizLabel">Example questions</span>
+      <span class="score" id="score"></span>
+    </div>
+    <div class="qs" id="qs"></div>
+    <div class="actions" id="actions" hidden>
+      <button class="ghost" id="retry" type="button">Retake</button>
+      <button class="ghost" id="more" type="button">New questions from same PDF</button>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  // ===== SETTINGS =====
+  // Paste your Gemini API key between the quotes so nobody has to type one.
+  // WARNING: anyone who opens this page can see this key and use up its free limit.
+  // Restrict it to your site first (see README: "Built-in key").
+  const BUILT_IN_KEY = "";
+  // ====================
+
+  const $ = id => document.getElementById(id);
+  const LETTERS = ["A","B","C","D"];
+  const API = "https://generativelanguage.googleapis.com/v1beta";
+  let pdfText = "", pdfName = "", ctl = null;
+  let quiz = [], answers = [], isExample = true;
+
+  const EXAMPLE = [
+    {q:"According to de Wit (1988), “doing the right project” refers to which type of success?",
+     choices:["Project management success","Business case success","Green success","Deliverable success"],answer:1,
+     explanation:"De Wit split success into project management success (doing the project right) and business case success (doing the right project)."},
+    {q:"Which rule says the WBS must cover exactly all of the work in the project?",
+     choices:["The 80/20 Rule","The Iron Triangle","The 100% Rule","Progressive elaboration"],answer:2,
+     explanation:"Haugan's 100% Rule (2003) requires the WBS to include 100% of the project work."}
+  ];
+
+  try { pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; } catch(e){}
+
+  function setStatus(msg, err){ const s=$("status"); s.textContent=msg||""; s.classList.toggle("err",!!err); }
+  const activeKey = () => $("apikey").value.trim() || BUILT_IN_KEY;
+  const headers = () => ({
+    "x-goog-api-key": activeKey(),
+    "content-type": "application/json"
+  });
+  // ---- "Limit used up" banner ----
+  let bannerTimer = null;
+  function nextPacificMidnight(){
+    // Gemini free-tier daily limits reset at midnight Pacific time
+    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US",{timeZone:"America/Los_Angeles",hour12:false,hour:"2-digit",minute:"2-digit",second:"2-digit"})
+      .formatToParts(new Date()).map(p=>[p.type,p.value]));
+    const since = ((+parts.hour%24)*3600 + (+parts.minute)*60 + (+parts.second))*1000;
+    return new Date(Date.now() + 86400000 - since);
+  }
+  function showLimitBanner(err){
+    const details = (err && err.details) || [];
+    const quotaIds = details.flatMap(d=>(d.violations||[]).map(v=>String(v.quotaId||v.quotaMetric||""))).join(" ");
+    const daily = /PerDay|per_day|daily/i.test(quotaIds + " " + (err?.message||""));
+    const retry = details.map(d=>d.retryDelay).find(Boolean);
+    let secs = retry ? Math.ceil(parseFloat(retry)) : 60;
+    clearInterval(bannerTimer);
+    const title = $("bannerTitle"), text = $("bannerText");
+    if(daily){
+      const reset = nextPacificMidnight().toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"});
+      title.textContent = "You've used all of today's free Gemini limit.";
+      text.textContent = "It resets "+reset+" (your time). You can also use a different key below.";
+      $("banner").hidden = false;
+    }else{
+      title.textContent = "Free per-minute limit reached.";
+      const tick = ()=>{
+        if(secs<=0){ clearInterval(bannerTimer); text.textContent = "You can try again now."; return; }
+        text.textContent = "Try again in "+secs+" second"+(secs===1?"":"s")+"."; secs--;
+      };
+      tick(); bannerTimer = setInterval(tick, 1000);
+      $("banner").hidden = false;
+    }
+    if(BUILT_IN_KEY){ $("keyPanel").hidden = false; $("ownKeyLine").hidden = true; }
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+
+  async function apiError(r){
+    let body = null; try{ body = await r.json(); }catch(e){}
+    const detail = body?.error?.message || "";
+    if(r.status===429){ showLimitBanner(body?.error); return "Limit reached. See the notice at the top of the page."; }
+    if(r.status===400 && /api key/i.test(detail)) return "That API key wasn't accepted. Check it and try again.";
+    const msg = {401:"That API key wasn't accepted.",403:"This key isn't allowed to use Gemini. Make sure you copied it from AI Studio.",
+      429:"Free limit reached for now. Wait a minute and try again (daily limits reset each day).",
+      500:"Google had a problem. Try again.",503:"Gemini is busy right now. Try again shortly."}[r.status] || ("Request failed (error "+r.status+").");
+    return msg + (detail && r.status!==429 ? " "+detail : "");
+  }
+  const ready = () => !!pdfText && !!activeKey() && !!$("model").value;
+  function updateGen(){ $("gen").disabled = !ready(); }
+
+  // ---- API key (optionally remembered in this browser only) ----
+  try{
+    const saved = localStorage.getItem("pqm_key");
+    if(saved){ $("apikey").value = saved; $("remember").checked = true; }
+  }catch(e){}
+  function saveKey(){
+    try{
+      if($("remember").checked && $("apikey").value.trim()) localStorage.setItem("pqm_key", $("apikey").value.trim());
+      else localStorage.removeItem("pqm_key");
+    }catch(e){}
+  }
+  $("remember").addEventListener("change", saveKey);
+
+  async function connect(){
+    if(!activeKey()){ setStatus("Paste your API key first.", true); return; }
+    setStatus("Checking your key…");
+    try{
+      const r = await fetch(API+"/models?pageSize=1000", {headers: headers()});
+      if(!r.ok) throw new Error(await apiError(r));
+      const data = await r.json();
+      // keep Gemini text models only, newest version first
+      const skip = /(embed|image|tts|audio|live|vision|aqa|learnlm|robotics|computer|thinking-exp|gemma)/i;
+      const ver = id => parseFloat((id.match(/gemini-(\d+(?:\.\d+)?)/)||[])[1]||0);
+      const models = (data.models||[])
+        .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
+        .map(m=>({id:m.name.replace(/^models\//,""), name:m.displayName||m.name}))
+        .filter(m=>/^gemini-/.test(m.id) && !skip.test(m.id))
+        .sort((a,b)=>ver(b.id)-ver(a.id) || a.id.length-b.id.length);
+      if(!models.length) throw new Error("No Gemini models are available for this key.");
+      const sel = $("model"); sel.innerHTML = "";
+      models.forEach(m=>{ const o=document.createElement("option"); o.value=m.id; o.textContent=m.name; sel.append(o); });
+      // newest stable Flash model: free and fast; else newest Flash of any kind; else first
+      const flash = models.filter(m=>/flash/i.test(m.id) && !/lite/i.test(m.id));
+      sel.value = (flash.find(m=>!/preview|exp/i.test(m.id)) || flash[0] || models[0]).id;
+      saveKey(); setStatus("Connected."); updateGen();
+    }catch(e){ setStatus(e.message || "Couldn't connect. Check your internet and try again.", true); }
+  }
+  $("connect").addEventListener("click", connect);
+  $("apikey").addEventListener("input", ()=>{ updateGen(); });
+  $("model").addEventListener("change", updateGen);
+
+  // ---- PDF reading ----
+  async function readPdf(file){
+    pdfName = file.name; $("fileName").textContent = file.name;
+    $("fileInfo").textContent = "Reading pages…"; pdfText = ""; updateGen(); setStatus("");
+    try{
+      const buf = await file.arrayBuffer();
+      const doc = await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+      const pages = [];
+      for(let i=1;i<=doc.numPages;i++){
+        const p = await doc.getPage(i);
+        const tc = await p.getTextContent();
+        const t = tc.items.map(it=>it.str).join(" ").replace(/\s+/g," ").trim();
+        if(t) pages.push("[Page "+i+"] "+t);
+      }
+      const text = pages.join("\n");
+      const words = text.split(/\s+/).filter(Boolean).length;
+      if(words < 30){
+        $("fileInfo").textContent = doc.numPages+" pages, but almost no text found.";
+        setStatus("This PDF looks scanned or image-only, so there's no text to read. Try a PDF exported from Word or PowerPoint.", true);
+        return;
+      }
+      pdfText = text;
+      $("fileInfo").textContent = doc.numPages+" pages · about "+words.toLocaleString()+" words";
+      if(!$("model").value) setStatus(activeKey() ?"Click Connect to finish setting up your key." : "Add your API key above, then click Connect.");
+      updateGen();
+    }catch(e){
+      $("fileInfo").textContent="Couldn't open this file.";
+      setStatus("That file couldn't be read as a PDF. Check that it isn't password-protected.", true);
+    }
+  }
+  $("file").addEventListener("change", e=>{ const f=e.target.files[0]; if(f) readPdf(f); });
+  const drop=$("drop");
+  ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over")}));
+  ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over")}));
+  drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) readPdf(f); });
+
+  function excerpt(text, max){
+    if(text.length<=max) return text;
+    const parts=8, size=Math.floor(max/parts), step=Math.floor(text.length/parts), out=[];
+    for(let i=0;i<parts;i++) out.push(text.slice(i*step, i*step+size));
+    return out.join("\n...\n");
+  }
+  function parseJson(text){
+    try{ return JSON.parse(text); }catch(e){}
+    const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/); if(fence){ try{ return JSON.parse(fence[1]); }catch(e){} }
+    const a = text.indexOf("["), b = text.lastIndexOf("]");
+    if(a>=0 && b>a){ try{ return JSON.parse(text.slice(a,b+1)); }catch(e){} }
+    return null;
+  }
+
+  // ---- Question generation ----
+  async function generate(){
+    if(!ready()) return;
+    ctl?.abort(); ctl = new AbortController();
+    const n = +$("count").value, level = $("level").value, focus = $("focus").value.trim();
+    $("gen").disabled = true; $("stop").hidden = false;
+    setStatus("Writing "+n+" questions… this usually takes 20–60 seconds.");
+    const prompt =
+`You are a teacher writing a multiple-choice reviewer quiz from a student's study material.
+Write exactly ${n} questions based ONLY on the material below. Difficulty: ${level}.${focus? " Focus on: "+focus+".":""}
+Rules:
+- Each question has exactly 4 choices, one correct. Wrong choices must be plausible, drawn from the same material where possible.
+- Spread questions across the whole material; no duplicates.
+- Vary the position of the correct answer.
+- Keep each explanation to one sentence that says why the answer is right.
+Reply with only a JSON array, no other text. Each item: {"q": string, "choices": [4 strings], "answer": index 0-3, "explanation": string}
+
+Material (from "${pdfName}"):
+${excerpt(pdfText, 90000)}`;
+    try{
+      const r = await fetch(API+"/models/"+encodeURIComponent($("model").value)+":generateContent", {
+        method:"POST", headers: headers(), signal: ctl.signal,
+        body: JSON.stringify({
+          contents:[{role:"user", parts:[{text: prompt}]}],
+          generationConfig:{ responseMimeType:"application/json", maxOutputTokens: 16000, temperature: 0.7 }
+        })
+      });
+      if(!r.ok) throw new Error(await apiError(r));
+      const data = await r.json();
+      const cand = (data.candidates||[])[0] || {};
+      const text = ((cand.content||{}).parts||[]).filter(p=>!p.thought).map(p=>p.text||"").join("");
+      if(cand.finishReason==="SAFETY" || data.promptFeedback?.blockReason) throw new Error("Gemini declined to write questions for this file.");
+      data.stop_reason = cand.finishReason==="MAX_TOKENS" ? "max_tokens" : "";
+      const parsed = parseJson(text);
+      const clean = (Array.isArray(parsed)?parsed:(parsed&&parsed.questions)||[])
+        .filter(x=>x&&x.q&&Array.isArray(x.choices)&&x.choices.length>=2&&Number.isInteger(+x.answer)&&+x.answer>=0&&+x.answer<Math.min(4,x.choices.length))
+        .map(x=>({q:String(x.q),choices:x.choices.slice(0,4).map(String),answer:+x.answer,explanation:String(x.explanation||"")}));
+      if(!clean.length) throw new Error(data.stop_reason==="max_tokens" ? "The quiz was too long to finish. Ask for fewer questions." : "The questions came back in the wrong format. Click Generate to try again.");
+      quiz = clean; isExample = false; answers = new Array(quiz.length).fill(null);
+      setStatus(""); render();
+      $("quizArea").scrollIntoView({behavior:"smooth",block:"start"});
+    }catch(e){
+      if(e.name==="AbortError") setStatus("Stopped.");
+      else setStatus(e.message==="Failed to fetch" ? "Couldn't reach Google. Check your internet connection." : e.message, true);
+    }finally{ $("stop").hidden = true; updateGen(); }
+  }
+
+  function render(){
+    const box=$("qs"); box.innerHTML="";
+    $("quizLabel").textContent = isExample ? "Example questions — upload a PDF to make your own" : quiz.length+" questions · "+pdfName;
+    quiz.forEach((item,qi)=>{
+      const card=document.createElement("article"); card.className="q";
+      const head=document.createElement("div"); head.className="qhead";
+      const num=document.createElement("span"); num.className="qnum"; num.textContent=String(qi+1).padStart(2,"0");
+      const qt=document.createElement("div"); qt.className="qtext"; qt.textContent=item.q;
+      head.append(num,qt);
+      if(isExample){ const ex=document.createElement("span"); ex.className="example"; ex.textContent="Example"; head.append(ex); }
+      const ch=document.createElement("div"); ch.className="choices";
+      const picked=answers[qi];
+      item.choices.forEach((c,ci)=>{
+        const b=document.createElement("button"); b.className="choice"; b.type="button";
+        const o=document.createElement("span"); o.className="oval"; o.textContent=LETTERS[ci];
+        const t=document.createElement("span"); t.className="t"; t.textContent=c;
+        b.append(o,t);
+        if(picked!==null){
+          b.disabled=true;
+          if(ci===item.answer) b.classList.add("right");
+          else if(ci===picked) b.classList.add("wrong");
+        }
+        b.addEventListener("click",()=>{ answers[qi]=ci; render(); });
+        ch.append(b);
+      });
+      card.append(head,ch);
+      if(picked!==null){
+        const ex=document.createElement("div"); ex.className="explain";
+        const b=document.createElement("b"); b.textContent = picked===item.answer ? "Correct. " : "Answer: "+LETTERS[item.answer]+". ";
+        ex.append(b, document.createTextNode(item.explanation));
+        card.append(ex);
+      }
+      box.append(card);
+    });
+    const done=answers.filter(a=>a!==null).length;
+    const right=answers.filter((a,i)=>a!==null&&a===quiz[i].answer).length;
+    $("score").textContent = done ? right+" / "+quiz.length : "";
+    $("actions").hidden = isExample;
+    $("more").hidden = !pdfText;
+  }
+
+  $("gen").addEventListener("click", generate);
+  $("more").addEventListener("click", generate);
+  $("stop").addEventListener("click", ()=>ctl?.abort());
+  $("retry").addEventListener("click",()=>{ answers=new Array(quiz.length).fill(null); render(); });
+
+  quiz = EXAMPLE; answers = [null,null]; render();
+  $("bannerClose").addEventListener("click", ()=>{ clearInterval(bannerTimer); $("banner").hidden = true; });
+  $("ownKey").addEventListener("click", ()=>{ $("keyPanel").hidden = false; $("ownKeyLine").hidden = true; $("apikey").focus(); });
+  if(BUILT_IN_KEY && !$("apikey").value.trim()){
+    $("keyPanel").hidden = true; $("ownKeyLine").hidden = false;
+  }
+  if(activeKey()) connect();
+})();
+</script>
+</body>
+</html>
