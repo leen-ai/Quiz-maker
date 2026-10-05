@@ -78,6 +78,8 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .choice span.t{min-width:0;overflow-wrap:anywhere}
 .explain{font-size:15px;color:var(--muted);border-left:3px solid var(--line);padding-left:12px}
 .explain b{color:var(--ink)}
+.source{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-top:6px;font-size:14px;font-style:italic}
+.source .pg{font:500 11px var(--mono);font-style:normal;text-transform:uppercase;letter-spacing:.06em;background:var(--accent-soft);color:var(--accent);padding:2px 8px;border-radius:99px}
 .example{font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.06em;background:var(--accent-soft);color:var(--accent);padding:2px 8px;border-radius:99px}
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;scroll-behavior:auto!important}}
@@ -327,7 +329,8 @@ Rules:
 - Spread questions across the whole material; no duplicates.
 - Vary the position of the correct answer.
 - Keep each explanation to one sentence that says why the answer is right.
-Reply with only a JSON array, no other text. Each item: {"q": string, "choices": [4 strings], "answer": index 0-3, "explanation": string}
+- The material is split into pages marked [Page N]. For each question, give the page number the answer comes from, and a short quote (under 20 words) copied word-for-word from that page that supports the answer.
+Reply with only a JSON array, no other text. Each item: {"q": string, "choices": [4 strings], "answer": index 0-3, "explanation": string, "page": number, "quote": string}
 
 Material (from "${pdfName}"):
 ${excerpt(pdfText, 90000)}`;
@@ -348,7 +351,7 @@ ${excerpt(pdfText, 90000)}`;
       const parsed = parseJson(text);
       const clean = (Array.isArray(parsed)?parsed:(parsed&&parsed.questions)||[])
         .filter(x=>x&&x.q&&Array.isArray(x.choices)&&x.choices.length>=2&&Number.isInteger(+x.answer)&&+x.answer>=0&&+x.answer<Math.min(4,x.choices.length))
-        .map(x=>({q:String(x.q),choices:x.choices.slice(0,4).map(String),answer:+x.answer,explanation:String(x.explanation||"")}));
+        .map(x=>({q:String(x.q),choices:x.choices.slice(0,4).map(String),answer:+x.answer,explanation:String(x.explanation||""),page:(+x.page>0&&Number.isFinite(+x.page))?Math.round(+x.page):null,quote:String(x.quote||"").trim()}));
       if(!clean.length) throw new Error(data.stop_reason==="max_tokens" ? "The quiz was too long to finish. Ask for fewer questions." : "The questions came back in the wrong format. Click Generate to try again.");
       quiz = clean; isExample = false; answers = new Array(quiz.length).fill(null);
       setStatus(""); render();
@@ -389,6 +392,12 @@ ${excerpt(pdfText, 90000)}`;
         const ex=document.createElement("div"); ex.className="explain";
         const b=document.createElement("b"); b.textContent = picked===item.answer ? "Correct. " : "Answer: "+LETTERS[item.answer]+". ";
         ex.append(b, document.createTextNode(item.explanation));
+        if(item.page || item.quote){
+          const src=document.createElement("div"); src.className="source";
+          if(item.page){ const pg=document.createElement("span"); pg.className="pg"; pg.textContent="Page "+item.page; src.append(pg); }
+          if(item.quote){ const qt=document.createElement("span"); qt.textContent="“"+item.quote+"”"; src.append(qt); }
+          ex.append(src);
+        }
         card.append(ex);
       }
       box.append(card);
